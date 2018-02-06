@@ -164,45 +164,4 @@ for new_id,old_id in enumerate(new_proc):
                 right_EFLD[:,:5,:] = left_EFLD[:,-5:,:]
 
 os.chdir(cur_dir)
-
-# just checking
-#os.chdir(new_dir)
-#for new_id,old_id in enumerate(new_proc):
-#    with h5py.File(new_fname.format(c), 'r') as f:
-#       print f['SP01INJECTOR'][:]
-#os.chdir(cur_dir)
-
-sys.exit()
-
-##Match boundrys
-#right_most_procs = [(1+c)*nn[0] - 1 for c in range(nn[1])]
-#for pc in right_most_procs:
-#    inv_proc_map[pc]
-
-
-
-#for c in ctrng:
-#    with h5py.File(new_fname.format(c), 'r') as f:
-#        inj = f['SP01INJECTOR']
-#        print inj[:]
-
-#print new_proc_map
-
-#                                          ny,  nx, xyz
-# f['BFLD'] = <HDF5 dataset "BFLD": shape (105, 205, 3), type "<f4">
-# f['EFLD'] = <HDF5 dataset "EFLD": shape (105, 205, 3), type "<f4">
-
-#                                         nparts, x,y,vx,vy,vz,z 
-# f['SP01'] = <HDF5 dataset "SP01": shape (271041, 6), type "<f4">
-
-# f['SP01INDEX'] = <HDF5 dataset "SP01INDEX": shape (271041, 2), type "<i4">
-# f['SP01INJECTOR'] = <HDF5 dataset "SP01INJECTOR": shape (1,), type "<f4">
-
-def viz_proc_layout(nnp):
-    vizstr = '[{:=4d}, {:=4d}, ..., {:=4d}]'
-
-    _tr =  arange(nnp[0]*nnp[1]).reshape(nnp[::-1])[::-1,:]
-
-    for _t in _tr:
-        print vizstr.format(*_t[[0,1,-1]])
-
+print 'Done!'
