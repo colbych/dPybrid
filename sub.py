@@ -1,5 +1,6 @@
 import h5py
 import numpy as np
+from matplotlib.colors import LogNorm
 
 #======================================================================
 
@@ -66,7 +67,16 @@ def qloader(num=None, path='./'):
     return d
 
 #======================================================================
+def get_output_times(path='./'):
+    import glob
+    import os
+    dpath = os.path.join(path, "Output/Phase/ptx1/Sp01/dens_sp01_*.h5")
+    choices = glob.glob(dpath)
+    choices = [int(c[-11:-3]) for c in choices]
+    choices.sort()
+    return np.array(choices)
 
+#======================================================================
 def dens_loader(dens_vars=None, num=None, path='./', sp=1):
     import glob
 
@@ -106,6 +116,9 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1):
             dx2 = (x2[1]-x2[0])/_N2
             d[k+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
             d[k+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
+
+            if k == 'etx1':
+                d['etx1_yy'] = np.exp(d['etx1_yy'])
 
     return d
 
@@ -365,3 +378,98 @@ def _auto_cast(k):
         return False
 
     return str(k)
+
+#======================================================
+
+def calc_psi(f):
+    """ Calculated the magnetic scaler potential for a 2D simulation
+    Args:
+        d (dict): Dictionary containing the fields of the simulation
+            d must contain bx, by, xx and yy
+    Retruns:
+        psi (numpy.array(len(d['xx'], len(d['yy']))) ): Magnetic scaler
+            potential
+    """
+
+    bx = f['bx']
+    by = f['by']
+    dy = f['bx_yy'][1] - f['bx_yy'][0]
+    dx = f['bx_xx'][1] - f['bx_xx'][0]
+
+    psi = 0.0*bx
+    psi[1:,0] = np.cumsum(bx[1:,0])*dy
+    psi[:,1:] = (psi[:,0] - np.cumsum(by[:,1:], axis=1).T*dx).T
+    #psi[:,1:] = psi[:,0] - np.cumsum(by[:,1:], axis=1)*dx
+    return psi
+
+#======================================================
+
+def div_B(f):
+    """Have you come looking to figure out which axis is X?
+
+    I have tried so many times to figure this out so you are in luck!
+    So long as this thing is zero you should know that 
+    axis0 is y
+    axis1 is x
+    
+    regards,
+    A smarter hopefully fatter version of you
+    """
+
+    bx = f['bx']
+    by = f['by']
+    dy = f['bx_yy'][1] - f['bx_yy'][0]
+    dx = f['bx_xx'][1] - f['bx_xx'][0]
+
+    return ((np.roll(bx, -1, axis=1) - np.roll(bx, 1, axis=1))/dx + 
+            (np.roll(by, -1, axis=0) - np.roll(bx, 1, axis=0))/dx)/2.
+
+#======================================================
+
+def spt(d, k, q=0, ax=None, rng='all', **kwargs):
+    if ax is None:
+        import matplotlib.pyplot as plt
+        ax = plt.gca()
+
+    yy = d[k+'_yy']
+    xx = d[k+'_xx']
+
+    if rng == 'all':
+        rng = np.s_[:,:]
+    else:
+        lb,up = [np.abs(xx - r).argmin() for r in rng]
+        rng = np.s_[:,lb:up]
+  
+    ax.plot(yy, yy**q*np.mean(d[k][rng], axis=1), **kwargs)
+    ax.set_yscale('log')
+    if np.min(yy) > 0.:
+        ax.set_xscale('log')
+    return ax
+
+#======================================================
+
+def fft_ksp(d, f, axis=1):
+    if type(f) == str:
+        x = d[f+'_xx']
+        f = d[f]
+    else:
+        x = d['bx_xx']
+
+    mf = np.mean(f, axis=[1,0][axis])
+
+    nn = len(mf)
+    Ff = np.fft.fft(mf)/(1.0*nn)
+
+    k = np.arange(nn)/(x[0] + x[-1])*2.*np.pi
+
+    return k[:nn/2], Ff[:nn/2]
+
+#======================================================
+
+def calc_flow(d):
+    ff = [d[k+'x1'] for k in 'p1 p2 p3'.split()]
+    pp = [d[k+'x1_yy'] for k in 'p1 p2 p3'.split()]
+    dps = [p[1] - p[0] for p in pp]
+    n = np.sum(ff[0]*dps[0], axis=0)
+    return [np.sum(p*f.T*dp, axis=1)/n for p,f,dp in zip(pp,ff,dps)]
+
