@@ -2,6 +2,8 @@ import h5py
 import numpy as np
 from matplotlib.colors import LogNorm
 
+phase_vars = 'p1x1 p2x1 p3x1 ptx1 e1x1'.split()
+
 #======================================================================
 
 def qloader(num=None, path='./'):
@@ -70,17 +72,28 @@ def qloader(num=None, path='./'):
 def get_output_times(path='./'):
     import glob
     import os
-    dpath = os.path.join(path, "Output/Phase/ptx1/Sp01/dens_sp01_*.h5")
-    choices = glob.glob(dpath)
-    choices = [int(c[-11:-3]) for c in choices]
-    choices.sort()
-    return np.array(choices)
+
+    for _pv in phase_vars:
+        fname =  "Output/Phase/{}/Sp01/dens_sp01_*.h5".format(_pv)
+        dpath = os.path.join(path, fname)
+        choices = glob.glob(dpath)
+        choices = [int(c[-11:-3]) for c in choices]
+        choices.sort()
+
+        if len(choices) > 0:
+            return np.array(choices)
+
+    print "No files found in path: {}".format(path)
+    raise FileNotFoundError
 
 #======================================================================
+
 def dens_loader(dens_vars=None, num=None, path='./', sp=1):
     import glob
 
     if path[-1] is not '/': path = path + '/'
+
+    choices = get_output_times(path=path)
     
     dpath = path+"Output/Phase/*"
     if dens_vars is None:
@@ -93,9 +106,6 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1):
     
     print dpath.format(dv=dens_vars[0], sp=sp, tm='*')
 
-    choices = glob.glob(dpath.format(dv=dens_vars[0], sp=sp, tm='*'))
-    choices = [int(c[-11:-3]) for c in choices]
-    choices.sort()
 
     dpath = path+"Output/Phase/{dv}/Sp{sp:02d}/dens_sp{sp:02d}_{tm:08}.h5"
 
@@ -473,3 +483,43 @@ def calc_flow(d):
     n = np.sum(ff[0]*dps[0], axis=0)
     return [np.sum(p*f.T*dp, axis=1)/n for p,f,dp in zip(pp,ff,dps)]
 
+#======================================================
+
+#def perp_spec(ar, sumax=2, lens=3*(2*np.pi)):
+#    """
+#      PerpSpectrum(ar,sumax=2,lenx=2*pi,leny=2*pi,lenz=2*pi)
+#      ar -> Array to compute the spectrum of
+#      sumax -> Axis of magnetic field direction. Right now only x,y,z = 0,1,2
+#      lenx,leny,lenz -> System size in x,y,z directions to take into 
+#                        account the anisotropy of system if any
+#      RETURNS:
+#      kk -> Wavenumber array
+#      fekp -> Spectrum of the array
+#    """
+#
+#    nf - np.fft
+#    mar = ar - np.mean(ar)
+#    nn  = np.shape(mar)
+#    kk = nf.fftshift(nf.fftfreq(n))*n*(2*pi/l) for n,l in zip(nn,lens)
+#
+#  
+#    far = nf.fftshift(nf.fftn(mar))/(np.prod(nn))
+#
+#    fftea = 0.5*np.abs(far)**2
+#
+#    ffteb = np.sum(fftea,axis=sumax)
+#
+#    fekp = np.zeros(min(nn[:2]))
+#
+#    kp = np.sqrt(np.sum(np.meshgrid(kx**2, ky**2), axis=0))
+#
+#    dk = np.abs(kp[1,0] - kp[0,0])
+#    kk = kp[nn[0]/2, nn[1]/2]
+#
+##   for i in range(len(fekp)):
+##      fekp[i]= np.sum(np.ma.MaskedArray(ffteb, ~((kp[nx/2,i+ny/2]-dk < kp) & (kp < kp[nx/2,i+ny/2]+dk))))
+##
+##        fekp[i]= np.sum(np.ma.MaskedArray(ffteb, ~((kp[nx/2,i+ny/2]-dk < kp) & (kp < kp[nx/2,i+ny/2]+dk))))
+##    
+#
+#   return kk,fekp/dk
