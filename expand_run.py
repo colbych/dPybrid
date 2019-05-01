@@ -2,7 +2,7 @@ import os
 import numpy as np
 from shutil import copyfile
 
-def build_dataset_dict(param):
+def build_dataset_dict(param, nid):
     flds = {}
 
 #<HDF5 dataset "BFLD": shape (205, 105, 3), type "<f4">
@@ -13,13 +13,19 @@ def build_dataset_dict(param):
     nn = np.array(param['node_number'])
     ncells = np.array(param['ncells'])
     nprocs = nn[1]*nn[0]
+    print ncells, nn, ncells/nn
     nx,ny = ncells/nn
 # Note we are assuming that the number of grid point ons a processor
 # is constant for the expansion
 
-    nsh = (ncells[1]/nn[1] + 5, ncells[0]/nn[0] + 5, 1)
+    x,y = nid%nn[0], nid//nn[0]
 
-    flds['BFLD'] = np.concatenate((np.ones(nsh), np.zeros(nsh), 
+    print 'id,x,y = ',nid,x,y
+    nsh = [ncells[1]/nn[1] + 5, ncells[0]/nn[0] + 5, 1]
+    nsh[0] = nsh[0] + int(y < nn[1]*(1.*ncells[1]/nn[1] - ncells[1]//nn[1]))
+    nsh[1] = nsh[1] + int(x < nn[0]*(1.*ncells[0]/nn[0] - ncells[0]//nn[0]))
+
+    flds['BFLD'] = np.concatenate((np.ones(nsh), np.zeros(nsh),
                                    np.zeros(nsh)), axis=2).astype('<f4')
 
     vdrift = param['vdrift']
@@ -34,7 +40,7 @@ def build_dataset_dict(param):
                                    vth*np.random.randn(npart, 1) + vdrift[0],
                                    vth*np.random.randn(npart, 1) + vdrift[1],
                                    vth*np.random.randn(npart, 1) + vdrift[2],
-                                   np.zeros((npart, 1)) + .25), 
+                                   np.zeros((npart, 1)) + .25),
                                    axis=1).astype('<f4')
 
     flds['SP01INDEX'] = np.concatenate((np.random.randint(4,4+nx, size=(npart,1)),
@@ -71,7 +77,7 @@ def build_maps(old_param, new_param):
         if x < nn[0]:
             new_proc_map.append(x + y*nn[0])
             inv_proc_map[x + y*nn[0]] = c
-        else: 
+        else:
             new_proc_map.append(-1) #generate new distro
 
 
@@ -93,15 +99,15 @@ def is_new_edge(old_param, inv_proc_map, n):
     right_most_procs = [(1+c)*nn[0] - 1 for c in range(nn[1])]
     edge_procs = [inv_proc_map[rp]+1 for rp in right_most_procs]
 
-    return n in edge_procs 
+    return n in edge_procs
 
 #======================================================================
 
-old_input = '../orig/input/input'
+old_input = '../run1/input/input'
 new_input = './input/input'
 
 cur_dir = os.getcwd()
-old_dir = '../orig/Restart/'
+old_dir = '../run1/Restart/'
 new_dir = './Restart/'
 
 fname = 'Rest_proc{:05d}.h5'
@@ -117,21 +123,22 @@ attrs = build_attrs(_path)
 print 'Moving into new restart dir',new_dir
 os.chdir(new_dir)
 
+shps = []
 for new_id,old_id in enumerate(new_proc):
     new_fname = fname.format(new_id)
     if old_id == -1:
         print "Creating", new_fname
-        flds = build_dataset_dict(new_param)
+        flds = build_dataset_dict(new_param, new_id)
         with h5py.File(new_fname, 'w') as f:
             for k,v in flds.iteritems():
-                dset = f.create_dataset(k, v.shape, dtype=v.dtype) 
+                dset = f.create_dataset(k, v.shape, dtype=v.dtype)
                 f[k][:] = v
             for k,v in attrs.iteritems():
                 f.attrs[k] = v
             f.attrs['NPART'] = np.array(f['SP01'].shape[0]).astype('int32')
     else:
         old_fname = os.path.join(cur_dir, old_dir, fname.format(old_id))
-# Symbolicly Link 
+# Symbolicly Link
 #   Fast but doesn't seem to work
         #print "linking", old_fname, "to", new_fname
         #os.symlink(old_fname, new_fname)
@@ -146,6 +153,7 @@ for new_id,old_id in enumerate(new_proc):
 
 
     with h5py.File(new_fname, 'r+') as f:
+        shps.append(f['BFLD'].shape)
         new_inj = np.array([new_param['planepos']]).astype('<f4')
         inj = f['SP01INJECTOR']
         inj[:] = new_inj

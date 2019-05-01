@@ -1,8 +1,10 @@
+import os
 import h5py
 import numpy as np
 from matplotlib.colors import LogNorm
+from scipy.ndimage import gaussian_filter as gf
 
-phase_vars = 'p1x1 p2x1 p3x1 ptx1 e1x1'.split()
+phase_vars = 'p1x1 p2x1 p3x1 ptx1 etx1'.split()
 
 #======================================================================
 
@@ -69,12 +71,20 @@ def qloader(num=None, path='./'):
     return d
 
 #======================================================================
-def get_output_times(path='./'):
+
+def get_output_times(path='./', sp=1, output_type='Phase'):
     import glob
-    import os
+    phase_vars = 'p1x1 p2x1 p3x1 ptx1 etx1'.split()
+    
+    if output_type.lower() == 'phase':
+        _fn = "Output/Phase/{var}/Sp{sp:02d}/dens_sp{sp:02d}_*.h5"
+    elif output_type.lower() == 'raw':
+        _fn = "Output/Raw/Sp{sp:02d}/raw_sp{sp:02d}_*.h5"
+    else:
+        raise TypeError
 
     for _pv in phase_vars:
-        fname =  "Output/Phase/{}/Sp01/dens_sp01_*.h5".format(_pv)
+        fname =  _fn.format(var=_pv, sp=sp)
         dpath = os.path.join(path, fname)
         choices = glob.glob(dpath)
         choices = [int(c[-11:-3]) for c in choices]
@@ -83,17 +93,17 @@ def get_output_times(path='./'):
         if len(choices) > 0:
             return np.array(choices)
 
-    print "No files found in path: {}".format(path)
+    print "No files found in path: {}".format(_fn.format(var=_pv, sp=sp))
     raise FileNotFoundError
 
 #======================================================================
 
-def dens_loader(dens_vars=None, num=None, path='./', sp=1):
+def dens_loader(dens_vars=None, num=None, path='./', sp=1, verbose=False):
     import glob
 
     if path[-1] is not '/': path = path + '/'
 
-    choices = get_output_times(path=path)
+    choices = get_output_times(path=path, sp=sp)
     
     dpath = path+"Output/Phase/*"
     if dens_vars is None:
@@ -102,9 +112,11 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1):
         if not type(dens_vars) in (list, tuple):
             dens_vars = [dens_vars]
 
+    dens_vars.sort()
+
     dpath = path+"Output/Phase/{dv}/Sp{sp:02d}/dens_sp{sp:02d}_{tm}.h5"
     
-    print dpath.format(dv=dens_vars[0], sp=sp, tm='*')
+    if verbose: print dpath.format(dv=dens_vars[0], sp=sp, tm='*')
 
 
     dpath = path+"Output/Phase/{dv}/Sp{sp:02d}/dens_sp{sp:02d}_{tm:08}.h5"
@@ -116,7 +128,7 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1):
         num = int(raw_input(_))
 
     for k in dens_vars:
-        print dpath.format(dv=k,sp=sp,tm=num)
+        if verbose: print dpath.format(dv=k,sp=sp,tm=num)
         with h5py.File(dpath.format(dv=k,sp=sp,tm=num),'r') as f:
             d[k] = f['DATA'][:]
 
@@ -129,12 +141,68 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1):
 
             if k == 'etx1':
                 d['etx1_yy'] = np.exp(d['etx1_yy'])
+    _id = "{}:{}:{}".format(os.path.abspath(path), num, "".join(dens_vars))
+    d['id'] = _id
+    return d
+
+#======================================================================
+
+def raw_loader(dens_vars=None, num=None, path='./', sp=1):
+    import glob
+
+    if path[-1] is not '/': path = path + '/'
+
+    choices = get_output_times(path=path, sp=sp, output_type='Raw')
+    dpath = path+"Output/Raw/Sp{sp:02d}/raw_sp{sp:02d}_{tm:08}.h5"
+
+    d = {}
+    while num not in choices:
+        _ =  'Select from the following possible movie numbers: '\
+             '\n{0} '.format(choices)
+        num = int(raw_input(_))
+
+    if type(dens_vars) is str:
+        dens_vars = dens_vars.split()
+    elif dens_vars is None:
+        dens_vars = 'p1 p2 p3 q tag x1 x2'.split()
+    print dpath.format(sp=sp,tm=num)
+    with h5py.File(dpath.format(sp=sp,tm=num),'r') as f:
+        for k in dens_vars:
+            d[k] = f[k][:]
 
     return d
 
 #======================================================================
 
-def field_loader(field_vars='all', components='all', num=None, path='./'):
+def track_loader(dens_vars=None, num=None, path='./', sp=1):
+    import glob
+
+    if path[-1] is not '/': path = path + '/'
+
+    choices = get_output_times(path=path, sp=sp, output_type='Raw')
+    dpath = path+"Output/Raw/Sp{sp:02d}/raw_sp{sp:02d}_{tm:08}.h5"
+
+    d = {}
+    while num not in choices:
+        _ =  'Select from the following possible movie numbers: '\
+             '\n{0} '.format(choices)
+        num = int(raw_input(_))
+
+    if type(dens_vars) is str:
+        dens_vars = dens_vars.split()
+    elif dens_vars is None:
+        dens_vars = 'p1 p2 p3 q tag x1 x2'.split()
+    print dpath.format(sp=sp,tm=num)
+    with h5py.File(dpath.format(sp=sp,tm=num),'r') as f:
+        for k in dens_vars:
+            d[k] = f[k][:]
+
+    return d
+
+#======================================================================
+
+def field_loader(field_vars='all', components='all', num=None, 
+                 path='./', verbose=False):
     import glob
     _field_choices_ = {'B':'Magnetic',
                        'E':'Electric',
@@ -167,7 +235,7 @@ def field_loader(field_vars='all', components='all', num=None, path='./'):
                              v = field_vars[0],
                              t = '*')
     
-    print test_path
+    if verbose: print test_path
     choices = glob.glob(test_path)
     #num_of_zeros = len()
     choices = [int(c[-11:-3]) for c in choices]
@@ -192,7 +260,7 @@ def field_loader(field_vars='all', components='all', num=None, path='./'):
                                t = num)
 
             kc = k.lower()+c
-            print ffn
+            if verbose: print ffn
             with h5py.File(ffn,'r') as f:
                 d[kc] = f['DATA'][:]
 
@@ -233,6 +301,26 @@ def pcm(d, k, ax=None, corse_res=(1,1), **kwargs):
     pc = ax.pcolormesh(d[k+'_xx'][rax], d[k+'_yy'][ray], d[k][ray,rax], **kwargs)
 
     return pc
+
+#======================================================================
+
+def ims(d, k, ax=None, corse_res=(1,1), **kwargs):
+    if ax is None:
+        import matplotlib.pyplot as plt
+        ax = plt.gca()
+    
+    ax.set_aspect('auto')
+    rax = np.s_[::corse_res[0]]
+    ray = np.s_[::corse_res[1]]
+
+    pvar = k
+    if type(k) is str:
+        pvar = d[k]
+
+    ext = [d[k+'_'+2*_v][rax][_c] for _c,_v in zip([0,-1,0,-1],'xxyy')]
+    im = ax.imshow(d[k][ray,rax], extent=ext, origin='low', **kwargs)
+
+    return im
 
 #======================================================================
 
@@ -311,13 +399,15 @@ def run_mean_fields(fname=None):
 
 #======================================================================
 
-def read_input(path='./input/input'):
+def read_input(path='./'):
     """Parse dHybrid input file for simulation information
 
     Args:
         path (str): path of input file
     """
+    import os
 
+    path = os.path.join(path, "input/input")
     inputs = {}
     # Load in all of the input stuff
     with open(path) as f:
@@ -436,12 +526,12 @@ def div_B(f):
 
 #======================================================
 
-def spt(d, k, q=0, ax=None, rng='all', **kwargs):
+def spt(d, k, q=0, ax=None, rng='all', sigma=0., yscale=1., **kwargs):
     if ax is None:
         import matplotlib.pyplot as plt
         ax = plt.gca()
 
-    yy = d[k+'_yy']
+    yy = d[k+'_yy']/yscale
     xx = d[k+'_xx']
 
     if rng == 'all':
@@ -450,11 +540,15 @@ def spt(d, k, q=0, ax=None, rng='all', **kwargs):
         lb,up = [np.abs(xx - r).argmin() for r in rng]
         rng = np.s_[:,lb:up]
   
-    ax.plot(yy, yy**q*np.mean(d[k][rng], axis=1), **kwargs)
+    pvar = yy**q*np.mean(d[k][rng], axis=1)
+    if sigma > 0:
+        pvar = gf(pvar, sigma=sigma, mode='constant')
+
+    ax.plot(yy, pvar, **kwargs)
     ax.set_yscale('log')
     if np.min(yy) > 0.:
         ax.set_xscale('log')
-    return ax
+    return ax,yy,pvar
 
 #======================================================
 
@@ -470,7 +564,7 @@ def fft_ksp(d, f, axis=1):
     nn = len(mf)
     Ff = np.fft.fft(mf)/(1.0*nn)
 
-    k = np.arange(nn)/(x[0] + x[-1])*2.*np.pi
+    k = np.arange(nn)/(x[0] - x[-1])*2.*np.pi
 
     return k[:nn/2], Ff[:nn/2]
 
@@ -482,6 +576,193 @@ def calc_flow(d):
     dps = [p[1] - p[0] for p in pp]
     n = np.sum(ff[0]*dps[0], axis=0)
     return [np.sum(p*f.T*dp, axis=1)/n for p,f,dp in zip(pp,ff,dps)]
+
+#======================================================
+
+def build_gam(d, C=None):
+    if C is None:
+        print '!!!Warning!!! speed of light not given, using 50'
+        C = 50.
+    d['gtx1_xx'] = d['ptx1_xx']
+    pp = d['ptx1_yy']
+    gam = np.sqrt(pp**2/C**2 + 1.)
+    d['gtx1_yy'] = (gam - 1.)
+    d['gtx1'] = (gam/pp*d['ptx1'].T).T
+
+    return None
+
+#======================================================
+
+def build_vel(d, C=None):
+    if C is None:
+        print '!!!Warning!!! speed of light not given, using 50'
+        C = 50.
+    d['vtx1_xx'] = d['ptx1_xx']
+    pp = d['ptx1_yy']
+    gam = np.sqrt(pp**2/C**2 + 1.)
+    d['vtx1_yy'] = pp/gam
+    d['vtx1'] = (gam**3*d['ptx1'].T).T
+
+    return None
+
+#======================================================
+
+# Restart Part Mapper
+def time_cbar(tms, ax, cmap='jet'):
+    import matplotlib as mpl 
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="2.5%", pad=0.05)
+
+    cmap = mpl.cm.jet
+    norm = mpl.colors.Normalize(vmin=tms[0], vmax=tms[-1])
+    cb1 = mpl.colorbar.ColorbarBase(cax, cmap=cmap, norm=norm)
+
+    cax.text(.5, 1.05, 'p ($m_iV_A$)',
+             transform=cax.transAxes, ha='center')
+
+class PartMapper(object):
+    def __init__(self, path):
+        self.path=path
+        
+        self.p = read_input(path)
+        
+        self.px,self.py = self.p['node_number']
+        self.nx,self.ny = self.p['ncells']
+        self.rx,self.ry = self.p['boxsize']
+        
+        self.dx = self.rx/1./self.nx
+        self.dy = self.ry/1./self.ny
+        
+    def _box_center(self, ip, jp):
+        dx = self.dx
+        dy = self.dy
+        
+        npx = self.nx//self.px
+        Mx = (self.nx/1./self.px - npx)*self.px
+        
+        npy = self.ny//self.py
+        My = (self.ny/1./self.py - npy)*self.py
+        
+        if ip < Mx:
+            xr = dx*(npx + 1)*ip + dx/2.
+        else:
+            xr = dx*(Mx + npx*ip) + dx/2.
+            
+        if jp < My:
+            yr = dy*(npy + 1)*jp + dy/2.
+        else:
+            yr = dy*(My + npy*jp) + dy/2.
+
+        return xr,yr
+    
+    def xrange_to_nums(self, x0, x1):
+        i0 = np.int(np.floor(x0/self.rx*self.px))
+        i1 = np.int(np.min([np.ceil(x1/self.rx*self.px), self.px - 1]))
+        
+        nums = range(i0, i1)
+        for _ny in range(1, self.py):
+            nums += range(i0 + _ny*self.px, i1 + _ny*self.px)
+        
+        return nums
+        
+    def _num_to_index(self, num):
+        ip = num%self.px
+        jp = num//self.px
+        return ip,jp
+
+    def _index_to_num(self, ip, jp):
+        num = self.px*jp + ip
+        return num
+    
+    def parts_from_index(self, ip, jp, sp='SP01'):
+        fname = self.path+'/Restart/Rest_proc{:05d}.h5'
+        num = self._index_to_num(ip, jp)
+        bcx,bcy = self._box_center(ip, jp)
+        dx,dy = self.dx,self.dy
+        
+        with h5py.File(fname.format(num),'r') as f:
+
+            pts = f[sp][:]
+            ind = f[sp+'INDEX'][:]
+            pts[:, 0] = pts[:,0] + bcx + dx*(ind[:,0] - 4)
+            pts[:, 1] = pts[:,1] + bcy + dy*(ind[:,1] - 4)
+        
+        return pts
+
+    def parts_from_num(self, num, sp='SP01'):
+        ip, jp = self._num_to_index(num)
+        return self.parts_from_index(ip, jp, sp=sp)
+
+#======================================================
+
+def quick_dens(d, k='p1x1'):
+    yy = d['p1x1_yy']
+    xx = d['p1x1_xx']
+    fp = d['p1x1']
+    dp = yy[1] - yy[0]
+
+    dens = dp*np.sum(fp, axis=0)
+    return dens,xx
+    
+
+#======================================================
+
+def dens_movie(path='./',
+               ax=None,
+               cmap='jet', 
+               rng=np.s_[1:],
+               mvar='p1x1',
+               avg_r=0):
+    import matplotlib.pyplot as plt
+    if ax is None:
+        plt.figure(77).clf()
+        fig,ax = plt.subplots(1, 1, num=77)
+        fig.set_size_inches(8.5, 11./4.)
+
+    tms = get_output_times(path=path)[rng]
+    shock_loc = []
+    
+    #d = dens_loader(mvar, path=path, num=tms[-1])
+    #dens,xx = quick_dens(d, mvar)
+    #ymax = dens.max()
+
+    r_in_time = [[] for _ in range(avg_r + 1)]
+
+    print "We will be working on {} lines...".format(len(tms))
+    for _c,tm in enumerate(tms):
+        print "{},".format(_c),
+        cid = plt.cm.get_cmap(cmap)(_c/1./len(tms))
+        d = dens_loader(mvar, path=path, num=tm)
+        dens,xx = quick_dens(d, mvar)
+
+        ax.plot(xx, dens, linewidth=.5, color=cid)
+
+        # Find the shock location
+        #ddens = .0001 + 0.*dens
+        ddens = np.abs(dens[5:] - dens[3:-2]) + .00001
+        sl = (np.abs(dens[4:-1] - 2.0)/ddens).argmin()
+        sl = sl + 4
+
+        # Try a different way
+        #sl = np.abs(dens[6:] - dens[1:-5] 
+        #          + dens[5:-1] - dens[2:-4] 
+        #          + dens[4:-2] - dens[3:-3]).argmax() + 3
+
+        shock_loc.append(xx[sl]) 
+
+        r_in_time[0].append(np.mean(dens[:sl]))
+        for _d,_r in enumerate(r_in_time[1:]):
+            ip0 = int(np.round(_d*1./avg_r*sl))
+            ip1 = int(np.round((_d+1.)/avg_r*sl))
+            _r.append(np.mean(dens[ip0:ip1]))
+    
+    ax.set_xlim(0, 1.5*shock_loc[-1])
+    ax.minorticks_on()
+    p = read_input(path=path)
+
+    return fig, ax, shock_loc, p['dt']*tms, r_in_time
 
 #======================================================
 
