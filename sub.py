@@ -1,6 +1,8 @@
 import os
 import h5py
 import numpy as np
+import matplotlib as mpl 
+import matplotlib.pyplot as plt 
 from matplotlib.colors import LogNorm
 from scipy.ndimage import gaussian_filter as gf
 
@@ -80,6 +82,10 @@ def get_output_times(path='./', sp=1, output_type='Phase'):
         _fn = "Output/Phase/{var}/Sp{sp:02d}/dens_sp{sp:02d}_*.h5"
     elif output_type.lower() == 'raw':
         _fn = "Output/Raw/Sp{sp:02d}/raw_sp{sp:02d}_*.h5"
+    elif output_type.lower() == 'field':
+        _fn = "Output/Fields/Magnetic/Total/x/Bfld_*.h5"
+    elif output_type.lower() == 'flow':
+        _fn = "Output/Phase/FluidVel/Sp{sp:02d}/x/Vfld_*.h5"
     else:
         raise TypeError
 
@@ -112,6 +118,10 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1, verbose=False):
         if not type(dens_vars) in (list, tuple):
             dens_vars = [dens_vars]
 
+    if 'FluidVel' in dens_vars:
+        dens_vars.pop(dens_vars.index('FluidVel'))
+
+    print dens_vars
     dens_vars.sort()
 
     dpath = path+"Output/Phase/{dv}/Sp{sp:02d}/dens_sp{sp:02d}_{tm}.h5"
@@ -128,6 +138,7 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1, verbose=False):
         num = int(raw_input(_))
 
     for k in dens_vars:
+
         if verbose: print dpath.format(dv=k,sp=sp,tm=num)
         with h5py.File(dpath.format(dv=k,sp=sp,tm=num),'r') as f:
             d[k] = f['DATA'][:]
@@ -174,6 +185,46 @@ def raw_loader(dens_vars=None, num=None, path='./', sp=1):
 
 #======================================================================
 
+def flow_loader(flow_vars=None, num=None, path='./', sp=1, verbose=False):
+    import glob
+
+    if path[-1] is not '/': path = path + '/'
+
+    choices = get_output_times(path=path, sp=sp, output_type='flow')
+    dpath = path+"Output/Phase/FluidVel/Sp{sp:02d}/{dv}/Vfld_{tm:08}.h5"
+
+    d = {}
+    while num not in choices:
+        _ =  'Select from the following possible movie numbers: '\
+             '\n{0} '.format(choices)
+        num = int(raw_input(_))
+
+    if type(flow_vars) is str:
+        flow_vars = flow_vars.split()
+    elif flow_vars is None:
+        flow_vars = 'x y z'.split()
+    #print dpath.format(sp=sp, tm=num)
+
+    for k in flow_vars:
+        if verbose: print dpath.format(sp=sp, dv=k, tm=num)
+
+        with h5py.File(dpath.format(sp=sp, dv=k, tm=num),'r') as f:
+            d[k] = f['DATA'][:]
+
+            _N2,_N1 = f['DATA'][:].shape #python is fliped
+            x1,x2 = f['AXIS']['X1 AXIS'][:],f['AXIS']['X2 AXIS'][:]
+            dx1 = (x1[1]-x1[0])/_N1
+            dx2 = (x2[1]-x2[0])/_N2
+            d[k+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
+            d[k+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
+
+    _id = "{}:{}:{}".format(os.path.abspath(path), num, "".join(flow_vars))
+    d['id'] = _id
+
+    return d
+
+#======================================================================
+
 def track_loader(dens_vars=None, num=None, path='./', sp=1):
     import glob
 
@@ -202,7 +253,7 @@ def track_loader(dens_vars=None, num=None, path='./', sp=1):
 #======================================================================
 
 def field_loader(field_vars='all', components='all', num=None, 
-                 path='./', verbose=False):
+                 path='./', slc=None, verbose=False):
     import glob
     _field_choices_ = {'B':'Magnetic',
                        'E':'Electric',
@@ -225,6 +276,9 @@ def field_loader(field_vars='all', components='all', num=None,
             field_vars = field_vars.upper().split()
         elif not type(field_vars) in (list, tuple):
             field_vars = [field_vars]
+
+    if slc is None:
+        slc = np.s_[:,:]
 
     fpath = path+"Output/Fields/{f}/{T}{c}/{v}fld_{t}.h5"
 
@@ -262,17 +316,35 @@ def field_loader(field_vars='all', components='all', num=None,
             kc = k.lower()+c
             if verbose: print ffn
             with h5py.File(ffn,'r') as f:
-                d[kc] = f['DATA'][:]
+                d[kc] = f['DATA'][slc]
 
-                _N2,_N1 = f['DATA'][:].shape #python is fliped
-                x1,x2 = f['AXIS']['X1 AXIS'][:],f['AXIS']['X2 AXIS'][:]
+                _N2,_N1 = f['DATA'].shape #python is fliped
+                x1,x2 = f['AXIS']['X1 AXIS'][:], f['AXIS']['X2 AXIS'][:]
                 dx1 = (x1[1]-x1[0])/_N1
                 dx2 = (x2[1]-x2[0])/_N2
                 d[kc+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
                 d[kc+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
 
+                d[kc+'_xx'] = d[kc+'_xx'][slc[1]]
+                d[kc+'_yy'] = d[kc+'_yy'][slc[0]]
+
     return d
 
+
+#======================================================================
+
+def slice_from_window(w, p):
+    bs = p['boxsize']
+    nc = p['ncells']
+    
+    if w == 'all':
+        w = [0., bs[0], 0., bs[1]]
+    ip0 = max(np.int(np.round(w[0]/1./bs[0]*nc[0])), 0)
+    ip1 = min(np.int(np.round(w[1]/1./bs[0]*nc[0])), nc[0])
+    jp0 = max(np.int(np.round(w[2]/1./bs[1]*nc[1])), 0)
+    jp1 = min(np.int(np.round(w[3]/1./bs[1]*nc[1])), nc[1])
+
+    return np.s_[jp0:jp1, ip0:ip1]
 
 #======================================================================
 
@@ -288,7 +360,6 @@ def _add_ExB(d):
 
 def pcm(d, k, ax=None, corse_res=(1,1), **kwargs):
     if ax is None:
-        import matplotlib.pyplot as plt
         ax = plt.gca()
     
     rax = np.s_[::corse_res[0]]
@@ -306,7 +377,6 @@ def pcm(d, k, ax=None, corse_res=(1,1), **kwargs):
 
 def ims(d, k, ax=None, corse_res=(1,1), **kwargs):
     if ax is None:
-        import matplotlib.pyplot as plt
         ax = plt.gca()
     
     ax.set_aspect('auto')
@@ -528,7 +598,6 @@ def div_B(f):
 
 def spt(d, k, q=0, ax=None, rng='all', sigma=0., yscale=1., **kwargs):
     if ax is None:
-        import matplotlib.pyplot as plt
         ax = plt.gca()
 
     yy = d[k+'_yy']/yscale
@@ -552,6 +621,21 @@ def spt(d, k, q=0, ax=None, rng='all', sigma=0., yscale=1., **kwargs):
 
 #======================================================
 
+def eff(E0=2000., path='./', num=None):
+    d = dens_loader('etx1', path=path, num=num)
+
+    yy = d['etx1_yy']
+    xx = d['etx1_xx']
+    dE = np.log(yy[1]) - np.log(yy[0])
+
+    ip = np.abs(yy - E0).argmin()
+  
+    EfE = np.sum(dE*(yy*d['etx1'][ip:, :]), axis=0)
+
+    return EfE, xx
+
+#======================================================
+
 def fft_ksp(d, f, axis=1):
     if type(f) == str:
         x = d[f+'_xx']
@@ -564,9 +648,36 @@ def fft_ksp(d, f, axis=1):
     nn = len(mf)
     Ff = np.fft.fft(mf)/(1.0*nn)
 
-    k = np.arange(nn)/(x[0] - x[-1])*2.*np.pi
+    k = np.arange(nn)/(x[-1] - x[0])*2.*np.pi
 
     return k[:nn/2], Ff[:nn/2]
+
+#======================================================
+
+def fft2D(d, f):
+    if type(f) == str:
+        f = d[f]
+        x = d[f+'_xx']
+        y = d[f+'_yy']
+    else:
+        x = d['bx_xx']
+        y = d['bx_yy']
+
+
+    ny,nx = f.shape
+    kx = np.arange(nx)/(x[-1] - x[0])*2.*np.pi
+    ky = np.arange(ny)/(y[-1] - y[0])*2.*np.pi
+
+    F = np.fft.fft2(f)/(1.0*nx*ny)
+
+    return kx[:nx/2], ky[:ny/2], F[:ny/2, :nx/2]
+
+#======================================================
+
+#def fft2Dmag(d, f):
+#    kx, ky, F = fft2D(d, f)
+#    kk = np.sqrt(kx**2 + ky**2).flat
+
 
 #======================================================
 
@@ -607,21 +718,21 @@ def build_vel(d, C=None):
 
 #======================================================
 
-# Restart Part Mapper
-def time_cbar(tms, ax, cmap='jet'):
-    import matplotlib as mpl 
+def time_cbar(tms, ax, cmap='jet', title='Time ($\Omega_{ci}^{-1}$)'):
     from mpl_toolkits.axes_grid1 import make_axes_locatable
 
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="2.5%", pad=0.05)
 
-    cmap = mpl.cm.jet
+    cmap = mpl.cm.get_cmap(cmap)
     norm = mpl.colors.Normalize(vmin=tms[0], vmax=tms[-1])
     cb1 = mpl.colorbar.ColorbarBase(cax, cmap=cmap, norm=norm)
 
-    cax.text(.5, 1.05, 'p ($m_iV_A$)',
+    cax.text(.5, 1.05, title,
              transform=cax.transAxes, ha='center')
 
+#======================================================
+# Restart Part Mapper
 class PartMapper(object):
     def __init__(self, path):
         self.path=path
@@ -697,15 +808,18 @@ class PartMapper(object):
 
 #======================================================
 
-def quick_dens(d, k='p1x1'):
-    yy = d['p1x1_yy']
-    xx = d['p1x1_xx']
-    fp = d['p1x1']
-    dp = yy[1] - yy[0]
+#def calc_dens(d, k='p1x1'):
+def moments(d, k='p1x1'):
+    y = d[k+'_yy']
+    x = d[k+'_xx']
+    fp = d[k]
+    dp = y[1] - y[0]
 
-    dens = dp*np.sum(fp, axis=0)
-    return dens,xx
-    
+    n = dp*np.sum(fp, axis=0)
+    u = dp*np.sum((fp.T*y).T, axis=0)/n
+    T = dp*np.sum((fp.T*y**2).T + fp*u**2 - 2.*u*(fp.T*y).T, axis=0)/n
+
+    return x,n,u,T
 
 #======================================================
 
@@ -715,7 +829,7 @@ def dens_movie(path='./',
                rng=np.s_[1:],
                mvar='p1x1',
                avg_r=0):
-    import matplotlib.pyplot as plt
+
     if ax is None:
         plt.figure(77).clf()
         fig,ax = plt.subplots(1, 1, num=77)
@@ -735,7 +849,7 @@ def dens_movie(path='./',
         print "{},".format(_c),
         cid = plt.cm.get_cmap(cmap)(_c/1./len(tms))
         d = dens_loader(mvar, path=path, num=tm)
-        dens,xx = quick_dens(d, mvar)
+        dens,xx = calc_dens(d, mvar)
 
         ax.plot(xx, dens, linewidth=.5, color=cid)
 
@@ -763,6 +877,36 @@ def dens_movie(path='./',
     p = read_input(path=path)
 
     return fig, ax, shock_loc, p['dt']*tms, r_in_time
+
+#======================================================
+# Making jet3 a permanent colormap
+def get_jet3():
+    N = 1024
+    jt = plt.cm.jet(np.linspace(0, 1, N))
+
+    ln = N/8
+    shp = np.concatenate([np.arange(0, 3*ln, 1), np.arange(3*ln, 5*ln, N/8), np.arange(5*ln, 8*ln, 1)])
+
+    rr = np.arange(len(shp))/(len(shp) - 1.0)
+    cdict = {}
+    cdict['red'] = np.vstack((rr, jt[shp,0], jt[shp,0])).T
+    cdict['green'] = np.vstack((rr, jt[shp,1], jt[shp,1])).T
+    cdict['blue'] = np.vstack((rr, jt[shp,2], jt[shp,2])).T
+    j3 = mpl.colors.LinearSegmentedColormap('jet3', segmentdata=cdict, N=256)
+
+    return j3
+
+#======================================================
+
+def find_shock(d, k):
+    #This assumes that the value of k is nearly constant
+    #upstream and increases at the shock
+    n = np.sum(np.abs(d[k]), axis=0)
+    n = n - 3.0*np.mean(n[3*(len(n)//4):])
+    ip = np.cumsum(n).argmax()
+    xp = d[k+"_xx"][ip]
+
+    return ip,xp
 
 #======================================================
 
