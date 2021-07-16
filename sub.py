@@ -1,3 +1,4 @@
+import future
 import os
 import h5py
 import numpy as np
@@ -5,6 +6,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt 
 from matplotlib.colors import LogNorm
 from scipy.ndimage import gaussian_filter as gf
+import pdb
 
 phase_vars = 'p1x1 p2x1 p3x1 ptx1 etx1'.split()
 
@@ -31,12 +33,12 @@ def qloader(num=None, path='./'):
     while num not in choices:
         _ =  'Select from the following possible movie numbers: '\
              '\n{0} '.format(choices)
-        num = int(raw_input(_))
+        num = int(input(_))
 
     d = {}
     for k in 'xyz':
-        print bpath.format(k,num)
-        print epath.format(k,num)
+        print(bpath.format(k, num))
+        print(epath.format(k, num))
         with h5py.File(bpath.format(k,num),'r') as f:
             d['b'+k] = f['DATA'][:]
 
@@ -59,7 +61,7 @@ def qloader(num=None, path='./'):
         d['e'+k+'_yy'] = d['yy']
      
     for k in dens_vars:
-        print dpath.format(k,num)
+        print(dpath.format(k,num))
         with h5py.File(dpath.format(k,num),'r') as f:
             d[k] = f['DATA'][:]
 
@@ -99,7 +101,7 @@ def get_output_times(path='./', sp=1, output_type='Phase'):
         if len(choices) > 0:
             return np.array(choices)
 
-    print "No files found in path: {}".format(_fn.format(var=_pv, sp=sp))
+    print("No files found in path: {}".format(_fn.format(var=_pv, sp=sp)))
     raise FileNotFoundError
 
 #======================================================================
@@ -121,12 +123,12 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1, verbose=False):
     if 'FluidVel' in dens_vars:
         dens_vars.pop(dens_vars.index('FluidVel'))
 
-    print dens_vars
+    print(dens_vars)
     dens_vars.sort()
 
     dpath = path+"Output/Phase/{dv}/Sp{sp:02d}/dens_sp{sp:02d}_{tm}.h5"
     
-    if verbose: print dpath.format(dv=dens_vars[0], sp=sp, tm='*')
+    if verbose: print(dpath.format(dv=dens_vars[0], sp=sp, tm='*'))
 
 
     dpath = path+"Output/Phase/{dv}/Sp{sp:02d}/dens_sp{sp:02d}_{tm:08}.h5"
@@ -135,11 +137,11 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1, verbose=False):
     while num not in choices:
         _ =  'Select from the following possible movie numbers: '\
              '\n{0} '.format(choices)
-        num = int(raw_input(_))
+        num = int(input(_))
 
     for k in dens_vars:
 
-        if verbose: print dpath.format(dv=k,sp=sp,tm=num)
+        if verbose: print(dpath.format(dv=k, sp=sp, tm=num))
         with h5py.File(dpath.format(dv=k,sp=sp,tm=num),'r') as f:
             d[k] = f['DATA'][:]
 
@@ -170,13 +172,13 @@ def raw_loader(dens_vars=None, num=None, path='./', sp=1):
     while num not in choices:
         _ =  'Select from the following possible movie numbers: '\
              '\n{0} '.format(choices)
-        num = int(raw_input(_))
+        num = int(input(_))
 
     if type(dens_vars) is str:
         dens_vars = dens_vars.split()
     elif dens_vars is None:
         dens_vars = 'p1 p2 p3 q tag x1 x2'.split()
-    print dpath.format(sp=sp,tm=num)
+    print(dpath.format(sp=sp, tm=num))
     with h5py.File(dpath.format(sp=sp,tm=num),'r') as f:
         for k in dens_vars:
             d[k] = f[k][:]
@@ -197,26 +199,42 @@ def flow_loader(flow_vars=None, num=None, path='./', sp=1, verbose=False):
     while num not in choices:
         _ =  'Select from the following possible movie numbers: '\
              '\n{0} '.format(choices)
-        num = int(raw_input(_))
+        num = int(input(_))
 
     if type(flow_vars) is str:
         flow_vars = flow_vars.split()
     elif flow_vars is None:
         flow_vars = 'x y z'.split()
-    #print dpath.format(sp=sp, tm=num)
+    #print(dpath.format(sp=sp, tm=num))
 
     for k in flow_vars:
-        if verbose: print dpath.format(sp=sp, dv=k, tm=num)
+        if verbose: print(dpath.format(sp=sp, dv=k, tm=num))
 
         with h5py.File(dpath.format(sp=sp, dv=k, tm=num),'r') as f:
-            d[k] = f['DATA'][:]
+            kc = 'u'+k
+            _ = f['DATA'].shape #python is fliped
+            dim = len(_)
+            print(kc,_)
+            d[kc] = f['DATA'][:]
+            if dim < 3:
+                _N2,_N1 = _
+                x1,x2 = f['AXIS']['X1 AXIS'][:], f['AXIS']['X2 AXIS'][:]
+                dx1 = (x1[1]-x1[0])/_N1
+                dx2 = (x2[1]-x2[0])/_N2
+                d[kc+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
+                d[kc+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
 
-            _N2,_N1 = f['DATA'][:].shape #python is fliped
-            x1,x2 = f['AXIS']['X1 AXIS'][:],f['AXIS']['X2 AXIS'][:]
-            dx1 = (x1[1]-x1[0])/_N1
-            dx2 = (x2[1]-x2[0])/_N2
-            d[k+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
-            d[k+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
+            else:
+                _N3,_N2,_N1 = _
+                x1 = f['AXIS']['X1 AXIS'][:]
+                x2 = f['AXIS']['X2 AXIS'][:]
+                x3 = f['AXIS']['X3 AXIS'][:]
+                dx1 = (x1[1]-x1[0])/_N1
+                dx2 = (x2[1]-x2[0])/_N2
+                dx3 = (x3[1]-x3[0])/_N3
+                d[kc+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
+                d[kc+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
+                d[kc+'_zz'] = dx3*np.arange(_N3) + dx3/2. + x3[0]
 
     _id = "{}:{}:{}".format(os.path.abspath(path), num, "".join(flow_vars))
     d['id'] = _id
@@ -237,13 +255,13 @@ def track_loader(dens_vars=None, num=None, path='./', sp=1):
     while num not in choices:
         _ =  'Select from the following possible movie numbers: '\
              '\n{0} '.format(choices)
-        num = int(raw_input(_))
+        num = int(input(_))
 
     if type(dens_vars) is str:
         dens_vars = dens_vars.split()
     elif dens_vars is None:
         dens_vars = 'p1 p2 p3 q tag x1 x2'.split()
-    print dpath.format(sp=sp,tm=num)
+    print(dpath.format(sp=sp, tm=num))
     with h5py.File(dpath.format(sp=sp,tm=num),'r') as f:
         for k in dens_vars:
             d[k] = f[k][:]
@@ -258,27 +276,34 @@ def field_loader(field_vars='all', components='all', num=None,
     _field_choices_ = {'B':'Magnetic',
                        'E':'Electric',
                        'J':'CurrentDens'}
-    _ivc_ = {v: k for k, v in _field_choices_.iteritems()}
+    _ivc_ = {v: k for k, v in _field_choices_.items()}
 
     if components == 'all':
         components = 'xyz'
 
-
     if path[-1] is not '/': path = path + '/'
     
+    p = read_input(path=path)
+    dim = len(p['ncells'])
+
     fpath = path+"Output/Fields/*"
 
     if field_vars == 'all':
         field_vars = [c[len(fpath)-1:] for c in glob.glob(fpath)]
         field_vars = [_ivc_[k] for k in field_vars]
     else:
-        if isinstance(field_vars, basestring):
+        if isinstance(field_vars, str):
             field_vars = field_vars.upper().split()
         elif not type(field_vars) in (list, tuple):
             field_vars = [field_vars]
 
     if slc is None:
-        slc = np.s_[:,:]
+        if dim == 1:
+            slc = np.s_[:]
+        elif dim == 2:
+            slc = np.s_[:,:]
+        elif dim == 3:
+            slc = np.s_[:,:,:]
 
     fpath = path+"Output/Fields/{f}/{T}{c}/{v}fld_{t}.h5"
 
@@ -289,7 +314,7 @@ def field_loader(field_vars='all', components='all', num=None,
                              v = field_vars[0],
                              t = '*')
     
-    if verbose: print test_path
+    if verbose: print(test_path)
     choices = glob.glob(test_path)
     #num_of_zeros = len()
     choices = [int(c[-11:-3]) for c in choices]
@@ -301,7 +326,7 @@ def field_loader(field_vars='all', components='all', num=None,
     while num not in choices:
         _ =  'Select from the following possible movie numbers: '\
              '\n{0} '.format(choices)
-        num = int(raw_input(_))
+        num = int(input(_))
 
     for k in field_vars:
         T = '' if k == 'J' else 'Total/'
@@ -314,19 +339,36 @@ def field_loader(field_vars='all', components='all', num=None,
                                t = num)
 
             kc = k.lower()+c
-            if verbose: print ffn
-            with h5py.File(ffn,'r') as f:
+            if verbose: print(ffn)
+            with h5py.File(ffn, 'r') as f:
                 d[kc] = f['DATA'][slc]
 
-                _N2,_N1 = f['DATA'].shape #python is fliped
-                x1,x2 = f['AXIS']['X1 AXIS'][:], f['AXIS']['X2 AXIS'][:]
-                dx1 = (x1[1]-x1[0])/_N1
-                dx2 = (x2[1]-x2[0])/_N2
-                d[kc+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
-                d[kc+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
+                _ = f['DATA'].shape #python is fliped
+                if dim < 3:
+                    _N2,_N1 = _
+                    x1,x2 = f['AXIS']['X1 AXIS'][:], f['AXIS']['X2 AXIS'][:]
+                    dx1 = (x1[1]-x1[0])/_N1
+                    dx2 = (x2[1]-x2[0])/_N2
+                    d[kc+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
+                    d[kc+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
 
-                d[kc+'_xx'] = d[kc+'_xx'][slc[1]]
-                d[kc+'_yy'] = d[kc+'_yy'][slc[0]]
+                    d[kc+'_xx'] = d[kc+'_xx'][slc[1]]
+                    d[kc+'_yy'] = d[kc+'_yy'][slc[0]]
+                else:
+                    _N3,_N2,_N1 = _
+                    x1 = f['AXIS']['X1 AXIS'][:]
+                    x2 = f['AXIS']['X2 AXIS'][:]
+                    x3 = f['AXIS']['X3 AXIS'][:]
+                    dx1 = (x1[1]-x1[0])/_N1
+                    dx2 = (x2[1]-x2[0])/_N2
+                    dx3 = (x3[1]-x3[0])/_N3
+                    d[kc+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
+                    d[kc+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
+                    d[kc+'_zz'] = dx3*np.arange(_N3) + dx3/2. + x3[0]
+
+                    d[kc+'_xx'] = d[kc+'_xx'][slc[2]]
+                    d[kc+'_yy'] = d[kc+'_yy'][slc[1]]
+                    d[kc+'_zz'] = d[kc+'_zz'][slc[0]]
 
     return d
 
@@ -397,7 +439,7 @@ def ims(d, k, ax=None, corse_res=(1,1), **kwargs):
 def calc_gamma(d, c, overwrite=False):
     if type(d) is dict:
         if 'gamma' in d:
-            print 'gamma already defined! Use overwite for overwrite.'
+            print('gamma already defined! Use overwite for overwrite.')
             if not overwrite:
                 return None
 
@@ -434,12 +476,12 @@ def prefix_fname_with_date(fname=''):
 
 def ask_to_save_fig(fig, fname=None, path=''):
     from os.path import join
-    if raw_input('Save Fig?\n> ') == 'y':
+    if input('Save Fig?\n> ') == 'y':
         if fname is None:
-            fname = raw_input('Save As:')
+            fname = input('Save As:')
 
         fname = join(path, prefix_fname_with_date(fname))
-        print 'Saving {}...'.format(fname)
+        print('Saving {}...'.format(fname))
         fig.savefig(fname)
 
 #======================================================================
@@ -453,7 +495,7 @@ def run_mean_fields(fname=None):
             If None it will ask.
     """
     if fname is None:
-        fname = raw_input('Enter dHybrid out file: ')
+        fname = input('Enter dHybrid out file: ')
 
     flds = {k:[] for k in 'xyz'}
     with open(fname, 'r') as f:
@@ -479,6 +521,7 @@ def read_input(path='./'):
 
     path = os.path.join(path, "input/input")
     inputs = {}
+    repeated_sections = {}
     # Load in all of the input stuff
     with open(path) as f:
         in_bracs = False
@@ -496,6 +539,16 @@ def read_input(path='./'):
                 if not in_bracs:
                     in_bracs = True
                     current_key = line
+
+# The input has repeated section and keys for differnt species
+# This section tries to deal with that
+                    sp_counter = 1
+                    while current_key in inputs:
+                        inputs[current_key+"_01"] = inputs[current_key]
+                        sp_counter += 1
+                        current_key = "{}_{:02d}".format(line, sp_counter)
+                        repeated_sections[current_key] = sp_counter
+
                     inputs[current_key] = []
 
                 else:
@@ -506,10 +559,10 @@ def read_input(path='./'):
                     else:
                         inputs[current_key].append(line)
 
-
     # Parse the input and cast it into usefull types
     param = {}
-    for inp in inputs.itervalues():
+    repeated_keys = {}
+    for key,inp in inputs.items():
         for sp in inp:
             k = sp.split('=')
             k,v = [v.strip(' , ') for v in k]
@@ -517,6 +570,10 @@ def read_input(path='./'):
             _fk = k.find('(') 
             if _fk > 0:
                 k = k[:_fk]
+
+            if k in param:
+                param["{}_{}".format(k, key)] = param[k]
+                k = "{}_{}".format(k, key)
 
             param[k] = [_auto_cast(c.strip()) for c in v.split(',')]
 
@@ -528,7 +585,7 @@ def read_input(path='./'):
 #======================================================================
 
 def _auto_cast(k):
-    """Takes an imput string and trys to cast it to a real type
+    """Takes an input string and tries to cast it to a real type
 
     Args:
         k (str): A string that might be a int, float or bool
@@ -650,7 +707,30 @@ def fft_ksp(d, f, axis=1):
 
     k = np.arange(nn)/(x[-1] - x[0])*2.*np.pi
 
-    return k[:nn/2], Ff[:nn/2]
+    return k[:nn//2], Ff[:nn//2]
+
+#======================================================================
+
+def fft_ksp_dict(d, smooth=None):
+    global_kk = np.logspace(-3,-.5, 10000)
+    x = d['xx']
+    fd = {'tt':d['tt']}
+    for v in "bx by bz".split():
+        nn = d[v].shape[1]
+        #Ff = np.fft.fft(d[v], axis=1)/(1.0*nn)
+        _f = d[v]
+        if smooth:
+            _f = gf(_f, sigma=smooth, mode='wrap')
+
+        Ff = np.fft.fft(_f, axis=1)/np.sqrt(nn*2.*np.pi)
+        #Ff = np.fft.fft(d[v], axis=1)*np.sqrt((x[-1] - x[0])/2./np.pi/nn)
+        k = np.arange(nn)/(x[-1] - x[0])*2.*np.pi
+    
+        fd[v] = Ff[:, :nn//2]
+    
+    fd['kk'] = k[:nn//2]
+
+    return fd
 
 #======================================================
 
@@ -692,7 +772,7 @@ def calc_flow(d):
 
 def build_gam(d, C=None):
     if C is None:
-        print '!!!Warning!!! speed of light not given, using 50'
+        print('!!!Warning!!! speed of light not given, using 50')
         C = 50.
     d['gtx1_xx'] = d['ptx1_xx']
     pp = d['ptx1_yy']
@@ -706,7 +786,7 @@ def build_gam(d, C=None):
 
 def build_vel(d, C=None):
     if C is None:
-        print '!!!Warning!!! speed of light not given, using 50'
+        print('!!!Warning!!! speed of light not given, using 50')
         C = 50.
     d['vtx1_xx'] = d['ptx1_xx']
     pp = d['ptx1_yy']
@@ -844,9 +924,9 @@ def dens_movie(path='./',
 
     r_in_time = [[] for _ in range(avg_r + 1)]
 
-    print "We will be working on {} lines...".format(len(tms))
+    print("We will be working on {} lines...".format(len(tms)))
     for _c,tm in enumerate(tms):
-        print "{},".format(_c),
+        print("{},".format(_c), end="")
         cid = plt.cm.get_cmap(cmap)(_c/1./len(tms))
         d = dens_loader(mvar, path=path, num=tm)
         dens,xx = calc_dens(d, mvar)
