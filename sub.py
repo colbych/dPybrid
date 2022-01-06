@@ -140,20 +140,34 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1, verbose=False):
         num = int(input(_))
 
     for k in dens_vars:
-
         if verbose: print(dpath.format(dv=k, sp=sp, tm=num))
         with h5py.File(dpath.format(dv=k,sp=sp,tm=num),'r') as f:
             d[k] = f['DATA'][:]
 
-            _N2,_N1 = f['DATA'][:].shape #python is fliped
-            x1,x2 = f['AXIS']['X1 AXIS'][:],f['AXIS']['X2 AXIS'][:]
-            dx1 = (x1[1]-x1[0])/_N1
-            dx2 = (x2[1]-x2[0])/_N2
-            d[k+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
-            d[k+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
+            _ = f['DATA'].shape #python is fliped
+            if len(_) < 3:
+                _N2,_N1 = _
+                x1,x2 = f['AXIS']['X1 AXIS'][:], f['AXIS']['X2 AXIS'][:]
+                dx1 = (x1[1]-x1[0])/_N1
+                dx2 = (x2[1]-x2[0])/_N2
+                d[k+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
+                d[k+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
+
+            else:
+                _N3,_N2,_N1 = _
+                x1 = f['AXIS']['X1 AXIS'][:]
+                x2 = f['AXIS']['X2 AXIS'][:]
+                x3 = f['AXIS']['X3 AXIS'][:]
+                dx1 = (x1[1]-x1[0])/_N1
+                dx2 = (x2[1]-x2[0])/_N2
+                dx3 = (x3[1]-x3[0])/_N3
+                d[k+'_xx'] = dx1*np.arange(_N1) + dx1/2. + x1[0]
+                d[k+'_yy'] = dx2*np.arange(_N2) + dx2/2. + x2[0]
+                d[k+'_zz'] = dx3*np.arange(_N3) + dx3/2. + x3[0]
 
             if k == 'etx1':
                 d['etx1_yy'] = np.exp(d['etx1_yy'])
+
     _id = "{}:{}:{}".format(os.path.abspath(path), num, "".join(dens_vars))
     d['id'] = _id
     return d
