@@ -1,4 +1,4 @@
-import future
+#import future
 import os
 import h5py
 import numpy as np
@@ -15,7 +15,7 @@ phase_vars = 'p1x1 p2x1 p3x1 ptx1 etx1'.split()
 def qloader(num=None, path='./'):
     import glob
 
-    if path[-1] is not '/': path = path + '/'
+    if path[-1] != '/': path = path + '/'
     
     bpath = path+"Output/Fields/Magnetic/Total/{}/Bfld_{}.h5"
     choices = glob.glob(bpath.format('x', '*'))
@@ -109,7 +109,7 @@ def get_output_times(path='./', sp=1, output_type='Phase'):
 def dens_loader(dens_vars=None, num=None, path='./', sp=1, verbose=False):
     import glob
 
-    if path[-1] is not '/': path = path + '/'
+    if path[-1] != '/': path = path + '/'
 
     choices = get_output_times(path=path, sp=sp)
     
@@ -120,8 +120,9 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1, verbose=False):
         if not type(dens_vars) in (list, tuple):
             dens_vars = [dens_vars]
 
-    if 'FluidVel' in dens_vars:
-        dens_vars.pop(dens_vars.index('FluidVel'))
+    for _k in 'FluidVel PressureTen'.split():
+        if _k in dens_vars:
+            dens_vars.pop(dens_vars.index(_k ))
 
     print(dens_vars)
     dens_vars.sort()
@@ -177,7 +178,7 @@ def dens_loader(dens_vars=None, num=None, path='./', sp=1, verbose=False):
 def raw_loader(dens_vars=None, num=None, path='./', sp=1):
     import glob
 
-    if path[-1] is not '/': path = path + '/'
+    if path[-1] != '/': path = path + '/'
 
     choices = get_output_times(path=path, sp=sp, output_type='Raw')
     dpath = path+"Output/Raw/Sp{sp:02d}/raw_sp{sp:02d}_{tm:08}.h5"
@@ -204,7 +205,7 @@ def raw_loader(dens_vars=None, num=None, path='./', sp=1):
 def flow_loader(flow_vars=None, num=None, path='./', sp=1, verbose=False):
     import glob
 
-    if path[-1] is not '/': path = path + '/'
+    if path[-1] != '/': path = path + '/'
 
     choices = get_output_times(path=path, sp=sp, output_type='flow')
     dpath = path+"Output/Phase/FluidVel/Sp{sp:02d}/{dv}/Vfld_{tm:08}.h5"
@@ -260,7 +261,7 @@ def flow_loader(flow_vars=None, num=None, path='./', sp=1, verbose=False):
 def track_loader(dens_vars=None, num=None, path='./', sp=1):
     import glob
 
-    if path[-1] is not '/': path = path + '/'
+    if path[-1] != '/': path = path + '/'
 
     choices = get_output_times(path=path, sp=sp, output_type='Raw')
     dpath = path+"Output/Raw/Sp{sp:02d}/raw_sp{sp:02d}_{tm:08}.h5"
@@ -295,7 +296,7 @@ def field_loader(field_vars='all', components='all', num=None,
     if components == 'all':
         components = 'xyz'
 
-    if path[-1] is not '/': path = path + '/'
+    if path[-1] != '/': path = path + '/'
     
     p = read_input(path=path)
     dim = len(p['ncells'])
@@ -386,6 +387,14 @@ def field_loader(field_vars='all', components='all', num=None,
 
     return d
 
+
+#======================================================================
+
+#def load_all(field_vars='all', components='all', num=None, 
+#                 path='./', slc=None, verbose=False):
+#    for sp in range(5):
+#        try:
+#            d = dens_loader(num=num, path=path, sp=sp):
 
 #======================================================================
 
