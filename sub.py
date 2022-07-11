@@ -1084,7 +1084,7 @@ def find_shock(d, k):
 
 #======================================================
 
-def multicolor(path="./", num=None):
+def multicolor(path="./", num=None, side='lower'):
     import glob
 
     if path[-1] != '/': path = path + '/'
@@ -1100,7 +1100,7 @@ def multicolor(path="./", num=None):
              '\n{0} '.format(choices)
         num = int(input(_))
 
-    MC = MultiColor(path, num)
+    MC = MultiColor(path, num, side=side)
 
 #======================================================
 
@@ -1108,18 +1108,19 @@ def multicolor_all(path, verbose=True):
     from PIL import Image
     tms = get_output_times(path)
     img_names = []
-    for tm in tms[:3]:
-        if verbose: print("{:.1f}".format(tm/tms[-1]*100.), end=', ')
-        MC = MultiColor(path, tm)
-        img_names.append(MC.fname)
+    for side in "upper lower".split():
+        for tm in tms:
+            if verbose: print("{:.1f}".format(tm/tms[-1]*100.), end=', ')
+            MC = MultiColor(path, tm, side=side)
+            img_names.append(MC.fname)
 
 
-    images = [Image.open(f) for f in img_names]
-    ldot = img_names[0].rfind('_')
-    pdf_save_path = img_names[0][:ldot] + ".pdf"
+        images = [Image.open(f) for f in img_names]
+        ldot = img_names[0].rfind('_')
+        pdf_save_path = img_names[0][:ldot] + ".pdf"
 
-    images[0].save(pdf_save_path, "PDF" ,resolution=100.0, save_all=True, 
-                   append_images=images[1:])
+        images[0].save(pdf_save_path, "PDF" ,resolution=100.0, save_all=True, 
+                       append_images=images[1:])
 
     return None
 
