@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import os
 import numpy as np
 import sub
 plt.rcParams.update({'font.size': 8})
@@ -7,10 +8,11 @@ plt.rcParams.update({'font.size': 8})
 # Fields that we want to load
 
 class MultiColor(object):
-    def __init__(self, path, time, side='lower'):
+    def __init__(self, path, time, side='lower', sp=1):
         self.path = path
         self.time = time
         self.side = side
+        self.sp = 1
 
         self.load_data()
         self.init_figure()
@@ -23,12 +25,14 @@ class MultiColor(object):
 #=====================================================================#
 
     def load_data(self):
+        # Note there is no gaurentee that all of these things will be loaded
+        # It would be good to add code to reflect this 
         param = sub.read_input(path=self.path)
         self.param = param
         f = sub.field_loader(path=self.path, num=self.time)
-        u = sub.flow_loader(path=self.path, num=self.time)
-        n = sub.dens_loader('x3x2x1', path=self.path, num=self.time)
-        p = sub.pres_loader(path=self.path, num=self.time)
+        u = sub.flow_loader(path=self.path, num=self.time, sp=self.sp)
+        n = sub.dens_loader('x3x2x1', path=self.path, num=self.time, sp=self.sp)
+        p = sub.pres_loader(path=self.path, num=self.time, sp=self.sp)
 
         d = {}
         for k in 'bx by bz ex ey ez'.split():
@@ -225,17 +229,19 @@ class MultiColor(object):
 #======================================================
 
     def save_figure(self):
-        sname = self.path.split("/")[-1]
+        path = os.path.abspath(__file__)
+        dir_path = os.path.dirname(path)
+
+        sname = self.path.strip('/').split("/")[-1]
         side = self.side
         time = self.time
-        fname = "./multicolor_figs/{}_{}_{}.png"
+
+        fname = os.path.join(dir_path, "./multicolor_figs/{}_{}_{:08d}.jpg")
         fname = fname.format(sname, side, time)
+
+        self.fname = fname
+
         self.fig.savefig(fname, dpi=400)
 
 #======================================================
 
-if __name__ == "__main__":
-    simpath = "/scratch/08570/tg878691/thickgfld1"
-    tms = sub.get_output_times(simpath)
-    for tm in tms:
-        MC = MultiColor(simpath, tm)
